@@ -1,0 +1,105 @@
+from enum import Enum
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolExecutor, ToolInvocation
+from langchain.tools import tool
+from langchain_core.runnables import RunnableLambda
+from langchain_community.chat_models import BedrockChat
+from langchain_aws import ChatBedrock
+# Task and Language Enums
+class TaskType(Enum):
+    GENERATE_CODE = "generate_code"
+    DEBUG = "debug"
+    AUTO_COMPLETE = "auto_complete"
+    GENERATE_DOCS = "generate_docs"
+    COMMIT_CHANGES = "commit_changes"
+    REFACTOR = "refactor"
+    EXPLAIN_CODE = "explain_code"
+    CODE_QUALITY_REVIEW = "code_quality_review"
+class LanguageType(Enum):
+    PYTHON = "Python"
+    JAVASCRIPT = "JavaScript"
+    TYPESCRIPT = "TypeScript"
+    JAVA = "Java"
+    CPP = "C++"
+    CSHARP = "C#"
+    GO = "Go"
+    RUST = "Rust"
+    PHP = "PHP"
+    RUBY = "Ruby"
+    SWIFT = "Swift"
+    KOTLIN = "Kotlin"
+    SCALA = "Scala"
+    R = "R"
+    SQL = "SQL"
+    HTML = "HTML"
+    CSS = "CSS"
+    APEX = "Salesforce Apex"
+    LWC = "Salesforce LWC"
+    AURA = "Salesforce Aura Component"
+    SOQL = "SOQL"
+    PERL = "Perl"
+    SHELL = "Shell/Bash"
+    POWERSHELL = "PowerShell"
+# Claude Sonnet 3.5 via Bedrock
+claude = ChatBedrock(
+    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+    model_kwargs={"temperature": 0.3}
+)
+# Tool Definitions
+@tool
+def explain_code(code: str) -> str:
+    return f"Explanation of the code:\n{code}"
+@tool
+def generate_code(prompt: str) -> str:
+    return f"Generated code based on: {prompt}"
+@tool
+def refactor_code(code: str) -> str:
+    return f"Refactored version of: {code}"
+@tool
+def debug_code(code: str) -> str:
+    return f"Debug output for: {code}"
+tools = [explain_code, generate_code, refactor_code, debug_code]
+executor = ToolExecutor(tools)
+# Graph Node: LLM + Tool Router
+class GraphState(dict):
+    pass
+def call_claude(state: GraphState) -> GraphState:
+    message = HumanMessage(content=state["input"])
+    response = claude.invoke([message])
+    return {"output": response.content}
+claude_node = RunnableLambda(call_claude)
+# Tool router logic based on task type
+async def route_tools(state: GraphState) -> GraphState:
+    task_type = state.get("task_type")
+    input_text = state.get("input")
+    if task_type == TaskType.EXPLAIN_CODE:
+        tool_input = {"code": input_text}
+        result = explain_code.invoke(tool_input)
+    elif task_type == TaskType.GENERATE_CODE:
+        tool_input = {"prompt": input_text}
+        result = generate_code.invoke(tool_input)
+    elif task_type == TaskType.REFACTOR:
+        tool_input = {"code": input_text}
+        result = refactor_code.invoke(tool_input)
+    elif task_type == TaskType.DEBUG:
+        tool_input = {"code": input_text}
+        result = debug_code.invoke(tool_input)
+    else:
+        result = "No tool matched."
+    return {"output": result}
+# Define Graph
+graph_builder = StateGraph(GraphState)
+graph_builder.add_node("claude_llm", claude_node)
+graph_builder.add_node("tool_router", route_tools)
+graph_builder.set_entry_point("tool_router")
+graph_builder.add_edge("tool_router", END)
+# Compile Graph
+ai_dev_graph = graph_builder.compile()
+# Sample Execution
+if **name** == "**main**":
+    result = ai_dev_graph.invoke({
+        "task_type": TaskType.EXPLAIN_CODE,
+        "input": "def add(a, b): return a + b"
+    })
+    print("\n[Response]", result["output"])
